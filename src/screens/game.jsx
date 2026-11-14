@@ -1,179 +1,420 @@
-import { lazy, Suspense, useEffect } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { motion } from 'motion/react'
-import { Wind, BatteryCharging, ShieldCheck, Moon, RotateCcw, Users, Volume2, VolumeX } from 'lucide-react'
+import {
+  ArrowUpRight,
+  BatteryCharging,
+  Compass,
+  Map,
+  MousePointer2,
+  Moon,
+  Radio,
+  RotateCcw,
+  ShieldCheck,
+  Satellite,
+  Trophy,
+  Users,
+  Volume2,
+  VolumeX,
+  Wind,
+} from 'lucide-react'
 import { useGame, MAX_DAYS, STORM_DAYS } from '../game/store'
+import { loadNasaImage, loadSpaceWeather } from '../game/nasa'
 import { speak, stopSpeaking } from '../game/speech'
 import { tutorialSteps } from '../game/tutorial'
-
-const MoonBase = lazy(() => import('../scene/MoonBase'))
+import { getMapPosition, LANDING_SITES, MOON_MAP_ID, NASA_MAP_PAGE } from '../game/sites'
+import ThemeToggle from '../game/ThemeToggle'
 
 function Meter({ icon: Icon, label, value, color }) {
   return (
-    <div className="rounded-2xl bg-white/5 p-3">
-      <div className="flex items-center justify-between text-lg font-bold">
-        <span className="flex items-center gap-2"><Icon size={22} /> {label}</span>
-        <span className={value < 30 ? 'text-rose-300' : ''}>{value}%</span>
-      </div>
-      <div className="mt-2 h-4 overflow-hidden rounded-full bg-white/10">
+    <div className="game-meter">
+      <div className="meter-label"><span><Icon size={16} /> {label}</span><b>{value}%</b></div>
+      <div className="meter-track">
         <motion.div
-          className={`h-full rounded-full ${color}`}
-          animate={{ width: value + '%' }}
+          className={`meter-fill ${color}`}
+          animate={{ width: `${value}%` }}
           transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+          role="progressbar"
+          aria-label={label}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={value}
         />
       </div>
     </div>
   )
 }
 
-function ActionButton({ icon: Icon, label, onClick, disabled, color = 'bg-amber-400 text-slate-900' }) {
+function ActionButton({ icon: Icon, label, detail, onClick, disabled, tone = 'gold', guideTarget }) {
   return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={`flex min-h-14 w-full items-center justify-center gap-2 rounded-xl px-4 py-3 text-lg font-bold transition active:scale-95 disabled:opacity-40 ${color}`}
-    >
-      <Icon size={22} /> {label}
+    <button className={`job-button ${tone}`} onClick={onClick} disabled={disabled} data-guide-target={guideTarget}>
+      <span className="job-icon"><Icon size={19} /></span>
+      <span className="job-copy"><b>{label}</b><small>{detail}</small></span>
+      <ArrowUpRight size={16} className="job-arrow" />
     </button>
   )
 }
 
-function NasaCard({ g }) {
-  if (g.status !== 'playing') return null
-  const todayIdx = STORM_DAYS.indexOf(g.day)
-  const tomorrowIdx = STORM_DAYS.indexOf(g.day + 1)
-  const idx = todayIdx >= 0 ? todayIdx : tomorrowIdx
-  if (idx < 0) return null
-  const today = todayIdx >= 0
-  const ev = g.nasa.events.length ? g.nasa.events[idx % g.nasa.events.length] : null
-  const strength = ev?.cls?.[0] === 'X' ? 'super strong' : ev?.cls?.[0] === 'M' ? 'strong' : 'small'
-  const source = g.nasa.source === 'live' ? 'Live NASA data' : g.nasa.source === 'saved' ? 'Saved NASA examples' : 'Loading NASA data...'
+function TutorialSpotlight({ target }) {
+  const [focus, setFocus] = useState(null)
+
+  useEffect(() => {
+    function measure() {
+      const element = document.querySelector(`[data-guide-target="${target}"]`)
+      if (!element) {
+        setFocus(null)
+        return
+      }
+
+      const rect = element.getBoundingClientRect()
+      const padding = 8
+      const left = Math.max(4, rect.left - padding)
+      const top = Math.max(4, rect.top - padding)
+      const right = Math.min(window.innerWidth - 4, rect.right + padding)
+      const bottom = Math.min(window.innerHeight - 4, rect.bottom + padding)
+      setFocus({
+        width: window.innerWidth,
+        height: window.innerHeight,
+        left,
+        top,
+        widthFocus: Math.max(0, right - left),
+        heightFocus: Math.max(0, bottom - top),
+        pointerX: Math.min(window.innerWidth - 30, rect.right - 2),
+        pointerY: Math.max(8, rect.top - 24),
+      })
+    }
+
+    const element = document.querySelector(`[data-guide-target="${target}"]`)
+    element?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    const frame = requestAnimationFrame(measure)
+    window.addEventListener('resize', measure)
+    window.addEventListener('scroll', measure, true)
+    return () => {
+      cancelAnimationFrame(frame)
+      window.removeEventListener('resize', measure)
+      window.removeEventListener('scroll', measure, true)
+    }
+  }, [target])
+
+  if (!focus) return null
+
+  const { width, height, left, top, widthFocus, heightFocus, pointerX, pointerY } = focus
+  const focusRight = left + widthFocus
+  const focusBottom = top + heightFocus
+  const shades = [
+    { left: 0, top: 0, width, height: top },
+    { left: 0, top, width: left, height: heightFocus },
+    { left: focusRight, top, width: Math.max(0, width - focusRight), height: heightFocus },
+    { left: 0, top: focusBottom, width, height: Math.max(0, height - focusBottom) },
+  ]
 
   return (
-    <div className={`rounded-2xl p-3 ${today ? 'bg-rose-500/30' : 'bg-amber-400/20'}`}>
-      <p className="text-lg font-bold">{today ? '⚠️ Space storm tonight!' : '🔭 Forecast: storm tomorrow'}</p>
-      {ev && <p>NASA saw a {strength} solar flare ({ev.cls}) on {ev.date}.</p>}
-      <p className="mt-1 text-xs opacity-80">🛰️ {source} · from NASA's DONKI space weather database</p>
+    <div className="guide-backdrop" aria-hidden="true">
+      {shades.map((style, index) => <div className="guide-shade" key={index} style={style} />)}
+      <div className="guide-focus-frame" style={{ left, top, width: widthFocus, height: heightFocus }} />
+      <motion.div
+        className="guide-pointer"
+        initial={{ x: pointerX + 30, y: pointerY - 12, opacity: 0 }}
+        animate={{ x: [pointerX + 30, pointerX, pointerX], y: [pointerY - 12, pointerY, pointerY], opacity: [0, 1, 1], scale: [1, 1.08, 1] }}
+        transition={{ duration: 1.6, repeat: Infinity, repeatDelay: 0.35 }}
+      >
+        <MousePointer2 size={26} />
+        <span>Tap here</span>
+      </motion.div>
     </div>
+  )
+}
+
+function NasaCard({ nasa }) {
+  const event = nasa.events[0]
+  return (
+    <section className="science-card">
+      <div className="science-card-heading"><span className="science-icon"><Radio size={19} /></span><div><span className="section-kicker">NASA SPACE WEATHER</span><h2>Sun activity watch</h2></div></div>
+      {nasa.source === 'loading' && <p className="science-copy">Connecting to NASA DONKI…</p>}
+      {nasa.source === 'live' && event && (
+        <div className="flare-reading">
+          <strong>{event.cls}</strong><span>Solar flare<br /><b>Recorded {event.date}</b></span>
+        </div>
+      )}
+      {nasa.source === 'live' && !event && <p className="science-copy">No solar flares were reported in this 60-day search window.</p>}
+      {nasa.source === 'error' && (
+        <div className="science-fallback">
+          <b>NASA live feed unavailable</b>
+          <span>No sample observations are substituted. Try again later or configure a NASA API key.</span>
+          {nasa.error && <small>{nasa.error}</small>}
+        </div>
+      )}
+      <p className="science-footnote">NASA flare records appear only when the live feed loads. Mission storm days are practice challenges, not forecasts.</p>
+      <a className="source-link" href="https://kauai.ccmc.gsfc.nasa.gov/DONKI/" target="_blank" rel="noreferrer">Open NASA DONKI <ArrowUpRight size={14} /></a>
+    </section>
+  )
+}
+
+function LandingMap({ image, error, focusedSiteId, setFocusedSiteId }) {
+  const focusedSite = LANDING_SITES.find((site) => site.id === focusedSiteId) || LANDING_SITES[0]
+  return (
+    <section className="content-card atlas-view">
+      <div className="content-heading">
+        <div><span className="section-kicker">NASA LUNAR ATLAS</span><h2>Six real Apollo landing regions</h2></div>
+        <span className="map-coordinate-readout">{focusedSite.name}</span>
+      </div>
+      <div className="game-moon-map">
+        {image ? (
+          <img src={image.imageUrl} alt="NASA GRAIL gravity field map of the Moon" />
+        ) : (
+          <div className="game-map-status">{error || 'Loading NASA’s GRAIL Moon map…'}</div>
+        )}
+        {LANDING_SITES.map((site, index) => (
+          <button
+            key={site.id}
+            style={getMapPosition(site)}
+            className={`map-pin ${site.id === focusedSite.id ? 'is-selected' : ''} ${site.id === 'apollo-12' ? 'is-offset' : ''}`}
+            onClick={() => setFocusedSiteId(site.id)}
+            title={`${site.mission} · ${site.name}`}
+            aria-label={`View ${site.mission}, ${site.name}`}
+            aria-pressed={site.id === focusedSite.id}
+          >
+            {index + 1}
+          </button>
+        ))}
+      </div>
+      <div className="atlas-facts">
+        <div><span>SELECTED REGION</span><b>{focusedSite.mission} · {focusedSite.name}</b></div>
+        <div><span>NASA MAP</span><b>GRAIL gravity field</b></div>
+        <a href={NASA_MAP_PAGE} target="_blank" rel="noreferrer">View map source <ArrowUpRight size={14} /></a>
+      </div>
+      <p className="game-map-note">Apollo 12 is nudged for clarity; its line points to the exact location.</p>
+      <div className="atlas-site-list">
+        {LANDING_SITES.map((site, index) => (
+          <button key={site.id} className={site.id === focusedSite.id ? 'is-selected' : ''} onClick={() => setFocusedSiteId(site.id)}>
+            <i>{index + 1}</i><span><b>{site.mission}</b><small>{site.name}</small></span>
+          </button>
+        ))}
+      </div>
+    </section>
   )
 }
 
 export default function Game() {
   const g = useGame()
-  const steps = tutorialSteps(g.name || 'Commander')
+  const [activeTab, setActiveTab] = useState('mission')
+  const [focusedSiteId, setFocusedSiteId] = useState(g.selectedSite)
+  const [mapAsset, setMapAsset] = useState(g.moonMapImage)
+  const [mapError, setMapError] = useState('')
+  const selectedSite = LANDING_SITES.find((site) => site.id === g.selectedSite) || LANDING_SITES[0]
+  const steps = useMemo(() => tutorialSteps(g.name || 'Commander', selectedSite), [g.name, selectedSite])
   const inTutorial = g.screen === 'tutorial'
   const step = steps[g.tutorialStep]
-  const last = g.tutorialStep === steps.length - 1
-  const focus = inTutorial ? step.focus : null
   const playing = g.status === 'playing'
-  const ring = (k) => (focus === k ? 'ring-4 ring-amber-300 rounded-2xl' : '')
+  const stormSoon = STORM_DAYS.includes(g.day) || STORM_DAYS.includes(g.day + 1)
 
   useEffect(() => {
-    if (inTutorial) speak(step.text, g.muted)
-  }, [inTutorial, g.tutorialStep])
+    if (mapAsset) {
+      useGame.getState().setMoonMapImage(mapAsset)
+      return
+    }
+
+    let active = true
+    loadNasaImage(MOON_MAP_ID, true).then(
+      (asset) => active && setMapAsset(asset),
+      (error) => active && setMapError(error.message)
+    )
+    return () => { active = false }
+  }, [mapAsset])
+
+  useEffect(() => {
+    if (g.nasa.source !== 'loading') return
+    let active = true
+    loadSpaceWeather().then((result) => {
+      if (active) useGame.getState().setNasa(result)
+    })
+    return () => { active = false }
+  }, [g.nasa.source])
+
+  useEffect(() => {
+    if (inTutorial && step) speak(step.text, g.muted)
+  }, [inTutorial, g.tutorialStep, g.muted, step])
 
   useEffect(() => {
     if (g.screen === 'game' && g.message) speak(g.message, g.muted)
-  }, [g.message, g.screen])
+  }, [g.message, g.muted, g.screen])
 
   useEffect(() => {
     if (g.muted) stopSpeaking()
   }, [g.muted])
 
-  function next() {
-    if (last) {
-      useGame.setState({ screen: 'game', message: `Let's go, ${g.name}! Keep your crew safe.` })
-    } else {
-      useGame.setState({ tutorialStep: g.tutorialStep + 1 })
+  function advanceTutorial() {
+    if (g.tutorialStep < steps.length - 1) useGame.setState({ tutorialStep: g.tutorialStep + 1 })
+  }
+
+  function previousTutorialStep() {
+    if (g.tutorialStep > 0) useGame.setState({ tutorialStep: g.tutorialStep - 1 })
+  }
+
+  function chooseTab(tab) {
+    if (inTutorial && step?.tab !== tab) return
+    setActiveTab(tab)
+    if (inTutorial) advanceTutorial()
+  }
+
+  function runAction(action) {
+    if (inTutorial && step?.action !== action) return
+    if (inTutorial && g.tutorialActionsDone.includes(action)) {
+      advanceTutorial()
+      return
     }
+    const actionsLeft = g.actionsLeft
+    g.act(action)
+    if (inTutorial) {
+      if (useGame.getState().actionsLeft === actionsLeft) return
+      useGame.setState((state) => ({ tutorialActionsDone: [...state.tutorialActionsDone, action] }))
+      advanceTutorial()
+    }
+  }
+
+  function finishDay() {
+    if (inTutorial && step?.action !== 'endday') return
+    g.endDay()
+    if (inTutorial) useGame.setState({ screen: 'game' })
   }
 
   function skip() {
     stopSpeaking()
-    useGame.setState({ screen: 'game', message: `Let's go, ${g.name}! Keep your crew safe.` })
+    useGame.setState({ screen: 'game', message: `Let’s go, ${g.name}! Keep your crew safe.` })
   }
 
-  const locked = inTutorial
-
   return (
-    <div className="relative h-screen w-screen overflow-hidden">
-      <div className={`absolute inset-0 ${focus === 'scene' ? 'ring-8 ring-inset ring-amber-300' : ''}`}>
-        <Suspense fallback={<div className="grid h-full place-items-center text-xl">Loading the Moon base...</div>}>
-          <MoonBase />
-        </Suspense>
+    <main className="game-app">
+      <header className="game-topbar">
+        <div className="mission-brand"><span className="brand-orbit">◉</span><span>LUNAR OUTPOST <b>ACADEMY</b></span></div>
+        <div className="current-site"><MapPinLabel /> <span>{selectedSite.mission}<b>{selectedSite.name}</b></span></div>
+        <nav className="game-nav" aria-label="Mission navigation">
+          <button data-guide-target="mission" className={activeTab === 'mission' ? 'active' : ''} onClick={() => chooseTab('mission')}><Compass size={17} /> Mission</button>
+          <button data-guide-target="map" className={activeTab === 'map' ? 'active' : ''} onClick={() => chooseTab('map')}><Map size={17} /> Landing map</button>
+          <button data-guide-target="nasa" className={activeTab === 'nasa' ? 'active' : ''} onClick={() => chooseTab('nasa')}><Satellite size={17} /> NASA data</button>
+        </nav>
+        <button className="sound-toggle" onClick={g.toggleMute} aria-label={g.muted ? 'Turn sound on' : 'Turn sound off'}>
+          {g.muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
+        </button>
+        <ThemeToggle />
+      </header>
+
+      <div className="game-body">
+        <aside className="mission-sidebar">
+          <div className="commander-heading">
+            <div className="commander-avatar">✦</div>
+            <div><span className="section-kicker">MISSION CONTROL</span><h1>{g.name || 'Commander'}</h1></div>
+          </div>
+          <div className="commander-score"><Trophy size={15} /><span><small>MISSION POINTS</small><b>{g.score}</b></span></div>
+          <div className="day-progress"><div><span>MISSION DAY</span><b>{String(g.day).padStart(2, '0')} <small>/ {MAX_DAYS}</small></b></div><div className="day-track"><i style={{ width: `${g.day / MAX_DAYS * 100}%` }} /></div></div>
+
+          <div className="resource-section">
+            <div className="sidebar-section-heading"><span>BASE SYSTEMS</span><small>Keep them above zero</small></div>
+            <Meter icon={Wind} label="Air" value={g.oxygen} color="air-fill" />
+            <Meter icon={BatteryCharging} label="Power" value={g.power} color="power-fill" />
+            <Meter icon={ShieldCheck} label="Shield" value={g.shielding} color="shield-fill" />
+          </div>
+
+          {playing ? (
+            <div className="jobs-section">
+              <div className="sidebar-section-heading"><span>TODAY’S JOBS</span><small>{g.actionsLeft} left</small></div>
+              <div className="job-list">
+                <ActionButton guideTarget="scrubbers" icon={Wind} label="Make fresh air" detail="+20 air · uses 8 power" onClick={() => runAction('scrubbers')} disabled={inTutorial ? step?.action !== 'scrubbers' : g.actionsLeft === 0} tone="blue" />
+                <ActionButton guideTarget="charge" icon={BatteryCharging} label="Charge batteries" detail="+25 power" onClick={() => runAction('charge')} disabled={inTutorial ? step?.action !== 'charge' : g.actionsLeft === 0} tone="gold" />
+                <ActionButton icon={ShieldCheck} label="Strengthen shield" detail="+20 shield · uses 8 power" onClick={() => runAction('shield')} disabled={inTutorial || g.actionsLeft === 0} tone="green" />
+                <ActionButton icon={Users} label={g.sheltered ? 'Crew in safe room' : 'Send crew to safety'} detail={stormSoon ? 'Storm practice: shelter now' : 'Protect them on storm days'} onClick={() => runAction('shelter')} disabled={inTutorial || g.actionsLeft === 0 || g.sheltered} tone="rose" />
+              </div>
+              <div>
+                <ActionButton guideTarget="endday" icon={Moon} label="End the day" detail="Rest and begin tomorrow" onClick={finishDay} disabled={inTutorial && step?.action !== 'endday'} tone="violet" />
+              </div>
+            </div>
+          ) : (
+            <div className="mission-result">
+              <span>{g.status === 'won' ? 'MISSION COMPLETE' : 'MISSION PAUSED'}</span>
+              <p>{g.message}</p>
+              <button onClick={g.reset}><RotateCcw size={16} /> Play again</button>
+            </div>
+          )}
+
+          <div className="sidebar-tip"><span>✦</span><p><b>Luna’s tip</b><br />{g.message || 'Choose two jobs to help your crew today.'}</p></div>
+        </aside>
+
+        <section className="mission-content">
+          {!inTutorial && g.message && <div className="game-message" role="status">{g.message}</div>}
+          {activeTab === 'mission' && (
+            <>
+              <div className="mission-scene">
+                {g.landingImage ? (
+                  <img className="mission-photo" src={g.landingImage.imageUrl} alt={`${g.landingImage.title}, a NASA archive image from the ${selectedSite.name} landing region`} />
+                ) : (
+                  <div className="mission-photo-placeholder">
+                    <Satellite size={36} />
+                    <b>NASA image unavailable</b>
+                    <span>The mission can continue; try again when the NASA image archive is online.</span>
+                  </div>
+                )}
+                <div className="scene-vignette" />
+                <div className="scene-topline"><span><i /> ARCHIVE IMAGE · {selectedSite.mission.toUpperCase()}</span><span>NASA / APOLLO PROGRAM</span></div>
+                <div className="scene-caption">
+                  <span className="section-kicker">YOUR EXPLORATION SITE</span>
+                  <h2>{selectedSite.name}</h2>
+                  <p>{selectedSite.summary}</p>
+                </div>
+                {g.landingImage && (
+                  <a className="photo-credit" href={g.landingImage.sourceUrl} target="_blank" rel="noreferrer">
+                    {g.landingImage.title} · {g.landingImage.credit} <ArrowUpRight size={13} />
+                  </a>
+                )}
+              </div>
+              <div className="mission-brief">
+                <div><span className="section-kicker">TODAY’S PLAN</span><h2>{stormSoon ? 'Prepare the crew for a storm drill.' : 'Keep the base ready for tomorrow.'}</h2></div>
+                <p>Choose two jobs from Mission Control. The photo above is a real NASA archive image; the Moon-base survival challenge is a learning simulation.</p>
+              </div>
+              <div className="mission-footnote"><span><MapPinLabel /> {selectedSite.mission} · {selectedSite.name}</span><span>Coordinates {Math.abs(selectedSite.latitude).toFixed(2)}°{selectedSite.latitude >= 0 ? 'N' : 'S'}, {Math.abs(selectedSite.longitude).toFixed(2)}°{selectedSite.longitude >= 0 ? 'E' : 'W'}</span></div>
+            </>
+          )}
+          {activeTab === 'map' && <LandingMap image={mapAsset} error={mapError} focusedSiteId={focusedSiteId} setFocusedSiteId={setFocusedSiteId} />}
+          {activeTab === 'nasa' && (
+            <div className="science-view">
+              <div className="content-heading"><div><span className="section-kicker">REAL DATA · REAL MISSIONS</span><h2>What NASA is observing</h2></div><span className="data-source-pill"><i /> DONKI / NASA IMAGES</span></div>
+              <NasaCard nasa={g.nasa} />
+              <div className="science-explainer"><div className="science-icon"><Satellite size={20} /></div><div><b>How to read this</b><p>NASA’s DONKI database records solar events scientists have observed. A solar flare is a burst of energy from the Sun. This game’s storm drills are fictional practice events and are not predictions.</p></div></div>
+              {g.landingImage && <div className="selected-archive"><img src={g.landingImage.imageUrl} alt={g.landingImage.title} /><div><span className="section-kicker">YOUR NASA IMAGE</span><b>{g.landingImage.title}</b><a href={g.landingImage.sourceUrl} target="_blank" rel="noreferrer">Open NASA archive <ArrowUpRight size={14} /></a></div></div>}
+            </div>
+          )}
+        </section>
       </div>
 
-      <button
-        onClick={g.toggleMute}
-        aria-label={g.muted ? 'Turn sound on' : 'Turn sound off'}
-        className="fixed right-3 top-3 z-50 rounded-full bg-slate-900/80 p-3"
-      >
-        {g.muted ? <VolumeX /> : <Volume2 />}
-      </button>
-
-      <aside className="absolute inset-x-0 bottom-0 max-h-[55vh] space-y-3 overflow-y-auto bg-slate-950/70 p-4 backdrop-blur md:inset-y-0 md:left-0 md:right-auto md:max-h-none md:w-96">
-        <h1 className="text-2xl font-extrabold">🌙 Lunar Outpost Academy</h1>
-        <p className="text-lg">
-          Commander {g.name} · Day {g.day} of {MAX_DAYS} · Buttons left: {g.actionsLeft}
-        </p>
-
-        <div className={`space-y-3 p-1 ${ring('meters')}`}>
-          <Meter icon={Wind} label="Air" value={g.oxygen} color="bg-sky-400" />
-          <Meter icon={BatteryCharging} label="Power" value={g.power} color="bg-amber-300" />
-          <Meter icon={ShieldCheck} label="Shield" value={g.shielding} color="bg-emerald-400" />
-        </div>
-
-        {!inTutorial && g.message && <p className="rounded-xl bg-white/10 p-3 text-center text-lg">{g.message}</p>}
-        {!inTutorial && <NasaCard g={g} />}
-
-        {playing ? (
-          <div className="space-y-2">
-            <div className={`space-y-2 p-1 ${ring('actions')}`}>
-              <ActionButton icon={Wind} label="Make fresh air" onClick={() => g.act('scrubbers')} disabled={locked || g.actionsLeft === 0} />
-              <ActionButton icon={BatteryCharging} label="Charge batteries" onClick={() => g.act('charge')} disabled={locked || g.actionsLeft === 0} />
-              <ActionButton icon={ShieldCheck} label="Make shield stronger" onClick={() => g.act('shield')} disabled={locked || g.actionsLeft === 0} />
-              <ActionButton
-                icon={Users}
-                label={g.sheltered ? 'Crew is in the safe room' : 'Send crew to safe room'}
-                onClick={() => g.act('shelter')}
-                disabled={locked || g.actionsLeft === 0 || g.sheltered}
-                color="bg-rose-400 text-slate-900"
-              />
-            </div>
-            <div className={`p-1 ${ring('endday')}`}>
-              <ActionButton icon={Moon} label="End the day" onClick={g.endDay} disabled={locked} color="bg-indigo-500 text-white" />
-            </div>
-          </div>
-        ) : (
-          <>
-            <p className="rounded-xl bg-white/10 p-3 text-center text-lg">{g.message}</p>
-            <ActionButton icon={RotateCcw} label={g.status === 'won' ? 'Play again' : 'Try again'} onClick={g.reset} color="bg-emerald-400 text-slate-900" />
-          </>
-        )}
-      </aside>
-
-      {inTutorial && (
-        <motion.div
-          key={g.tutorialStep}
-          initial={{ y: 30, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          className="fixed inset-x-2 top-2 z-40 rounded-3xl bg-white p-4 text-slate-900 shadow-2xl md:inset-x-auto md:bottom-4 md:left-[26rem] md:right-4 md:top-auto"
-        >
-          <div className="flex items-start gap-3">
-            <div className="text-5xl">🧑‍🚀</div>
-            <div className="flex-1">
-              <p className="text-sm font-bold text-indigo-600">Captain Luna · step {g.tutorialStep + 1} of {steps.length}</p>
-              <p className="text-xl font-semibold leading-snug">{step.text}</p>
-            </div>
-          </div>
-          <div className="mt-3 flex flex-wrap items-center gap-2">
-            <button onClick={() => speak(step.text, g.muted)} className="rounded-xl bg-slate-200 px-4 py-2 font-bold">🔊 Say it again</button>
-            <button onClick={skip} className="rounded-xl px-3 py-2 text-slate-500">Skip</button>
-            <button onClick={next} className="ml-auto rounded-xl bg-amber-400 px-5 py-3 text-lg font-extrabold">
-              {last ? 'Start playing! 🚀' : 'Next ➡️'}
-            </button>
-          </div>
-        </motion.div>
+      {inTutorial && step && (
+        <TutorialSpotlight target={step.target} />
       )}
-    </div>
+
+      {inTutorial && step && (
+        <motion.section
+          key={g.tutorialStep}
+          className="captain-guide"
+          initial={{ y: 22, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          role="dialog"
+          aria-labelledby="guide-title"
+        >
+          <div className="guide-mascot" aria-hidden="true">✦</div>
+          <div className="guide-copy">
+            <div className="guide-meta">CAPTAIN LUNA <span>·</span> {String(g.tutorialStep + 1).padStart(2, '0')} / {String(steps.length).padStart(2, '0')}</div>
+            <h2 id="guide-title">{step.title}</h2>
+            <p>{step.text}</p>
+            <div className="guide-progress"><i style={{ width: `${(g.tutorialStep + 1) / steps.length * 100}%` }} /></div>
+          </div>
+          <div className="guide-actions">
+            <button onClick={() => speak(step.text, g.muted)} aria-label="Hear Captain Luna again"><Volume2 size={17} /></button>
+            <button onClick={previousTutorialStep} disabled={g.tutorialStep === 0}>Previous</button>
+            <button onClick={skip}>Skip</button>
+          </div>
+        </motion.section>
+      )}
+    </main>
   )
+}
+
+function MapPinLabel() {
+  return <Map size={15} aria-hidden="true" />
 }

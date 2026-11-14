@@ -1,4 +1,5 @@
 import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
 
 export const MAX_DAYS = 10
 export const STORM_DAYS = [3, 6, 8]
@@ -22,18 +23,48 @@ const START = {
   message: '',
 }
 
-export const useGame = create((set, get) => ({
+export const useGame = create(persist((set, get) => ({
   ...START,
-  screen: 'welcome', // welcome | tutorial | game
+  screen: 'welcome', // welcome | landing | tutorial | game
   name: '',
+  selectedSite: 'apollo-11',
+  landingImage: null,
+  moonMapImage: null,
   muted: false,
+  theme: 'dark',
   tutorialStep: 0,
+  tutorialActionsDone: [],
   nasa: { source: 'loading', events: [] },
+  score: 0,
+  mazePosition: { x: 1, y: 1 },
+  mazeCollected: [],
+  mazeComplete: false,
 
   setName: (name) => set({ name }),
+  startSiteSelection: () => set((s) => ({ screen: 'landing', selectedSite: s.selectedSite || 'apollo-11' })),
+  selectLandingSite: (selectedSite) => set((s) => s.selectedSite === selectedSite ? {} : ({
+    selectedSite,
+    mazePosition: { x: 1, y: 1 },
+    mazeCollected: [],
+    mazeComplete: false,
+  })),
+  setMazeProgress: (mazePosition, mazeCollected) => set({ mazePosition, mazeCollected }),
+  addScore: (points) => set((s) => ({ score: s.score + points })),
+  completeMaze: () => set((s) => s.mazeComplete ? {} : ({ mazeComplete: true, score: s.score + 250 })),
+  launchMission: (selectedSite, landingImage) => set({
+    ...START,
+    screen: 'tutorial',
+    selectedSite,
+    landingImage,
+    tutorialStep: 0,
+    tutorialActionsDone: [],
+    mazeComplete: true,
+  }),
+  setMoonMapImage: (moonMapImage) => set({ moonMapImage }),
   setNasa: (nasa) => set({ nasa }),
   toggleMute: () => set((s) => ({ muted: !s.muted })),
-  startTutorial: () => set({ screen: 'tutorial', tutorialStep: 0 }),
+  toggleTheme: () => set((s) => ({ theme: s.theme === 'dark' ? 'light' : 'dark' })),
+  startTutorial: () => set({ screen: 'tutorial', tutorialStep: 0, tutorialActionsDone: [] }),
 
   act: (type) => {
     const s = get()
@@ -81,11 +112,38 @@ export const useGame = create((set, get) => ({
     } else {
       const nd = s.day + 1
       let extra = ''
-      if (STORM_DAYS.includes(nd)) extra = ' Warning! NASA saw a solar flare on the Sun. A space storm hits tonight! Press the safe room button.'
-      else if (STORM_DAYS.includes(nd + 1)) extra = ' NASA says a space storm may come tomorrow. Get ready!'
+      if (STORM_DAYS.includes(nd)) extra = ' Mission practice alert: a space-storm challenge is coming tomorrow. This is a game challenge, not a NASA forecast.'
+      else if (STORM_DAYS.includes(nd + 1)) extra = ' A space-storm practice challenge may come tomorrow. Get the crew ready!'
       set({ oxygen, power, shielding, day: nd, actionsLeft: 2, sheltered: false, message: note + extra })
     }
   },
 
-  reset: () => set({ ...START, message: `Let's try again, ${get().name || 'Commander'}!` }),
+  reset: () => set({ ...START, screen: 'game', message: `Let's try again, ${get().name || 'Commander'}!` }),
+}), {
+  name: 'junior-astronaut-mission',
+  partialize: (s) => ({
+    ...START,
+    screen: s.screen,
+    name: s.name,
+    selectedSite: s.selectedSite,
+    landingImage: s.landingImage,
+    moonMapImage: s.moonMapImage,
+    muted: s.muted,
+    theme: s.theme,
+    tutorialStep: s.tutorialStep,
+    tutorialActionsDone: s.tutorialActionsDone,
+    nasa: s.nasa,
+    score: s.score,
+    mazePosition: s.mazePosition,
+    mazeCollected: s.mazeCollected,
+    mazeComplete: s.mazeComplete,
+    day: s.day,
+    oxygen: s.oxygen,
+    power: s.power,
+    shielding: s.shielding,
+    actionsLeft: s.actionsLeft,
+    sheltered: s.sheltered,
+    status: s.status,
+    message: s.message,
+  }),
 }))

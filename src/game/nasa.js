@@ -1,37 +1,82 @@
 const KEY = import.meta.env.VITE_NASA_API_KEY || 'DEMO_KEY'
 
-// Saved real solar flares, used only if the live NASA call fails.
-// VERIFY these dates and classes on NASA DONKI before you submit.
-export const SAVED_EVENTS = [
-  { date: '2024-10-03', cls: 'X9.0', type: 'Solar flare' },
-  { date: '2024-05-14', cls: 'X8.7', type: 'Solar flare' },
-  { date: '2024-05-11', cls: 'X5.8', type: 'Solar flare' },
-  { date: '2017-09-06', cls: 'X9.3', type: 'Solar flare' },
-  { date: '2003-10-28', cls: 'X17.2', type: 'Solar flare' },
-]
+const iso = (date) => date.toISOString().slice(0, 10)
+const rank = (classType) => ({ X: 3, M: 2, C: 1, B: 0 }[classType?.[0]] ?? 0)
 
-const iso = (d) => d.toISOString().slice(0, 10)
-const rank = (c) => ({ X: 3, M: 2, C: 1, B: 0 }[c?.[0]] ?? 0)
+export async function loadNasaImage(nasaId, preferOriginal = false) {
+  const url = `https://images-api.nasa.gov/search?q=${encodeURIComponent(nasaId)}&media_type=image&page_size=5`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10000)
+
+  try {
+    const response = await fetch(url, { signal: controller.signal })
+    if (!response.ok) throw new Error(`NASA Images returned status ${response.status}.`)
+    const result = await response.json()
+    const item = result.collection?.items?.find((candidate) =>
+      candidate.data?.some((entry) => entry.nasa_id?.toLowerCase() === nasaId.toLowerCase())
+    )
+    const metadata = item?.data?.[0]
+    if (!item || !metadata) throw new Error(`NASA image ${nasaId} was not found.`)
+
+    const imageLinks = (item.links || []).filter((link) => link.render === 'image' && link.href)
+    const sizedImages = imageLinks.filter((link) => link.width && link.width <= 1920)
+    const original = imageLinks.find((link) => link.rel === 'canonical')
+    const image = (preferOriginal && original)
+      || sizedImages.sort((a, b) => a.width - b.width).at(-1)
+      || original
+      || imageLinks[0]
+    if (!image) throw new Error(`NASA image ${nasaId} has no displayable image.`)
+
+    return {
+      nasaId,
+      title: metadata.title || nasaId,
+      description: metadata.description_508 || metadata.description || '',
+      credit: metadata.secondary_creator || metadata.photographer || metadata.center || 'NASA',
+      imageUrl: image.href,
+      sourceUrl: `https://images.nasa.gov/details/${nasaId}`,
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error(`NASA Images request for ${nasaId} timed out.`)
+    }
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+}
 
 export async function loadSpaceWeather() {
+  const end = new Date()
+  const start = new Date(Date.now() - 60 * 24 * 3600 * 1000)
+  const url = `https://api.nasa.gov/DONKI/FLR?startDate=${iso(start)}&endDate=${iso(end)}&api_key=${KEY}`
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 8000)
+
   try {
-    const end = new Date()
-    const start = new Date(Date.now() - 60 * 24 * 3600 * 1000)
-    const url = `https://api.nasa.gov/DONKI/FLR?startDate=${iso(start)}&endDate=${iso(end)}&api_key=${KEY}`
-    const ctrl = new AbortController()
-    const timer = setTimeout(() => ctrl.abort(), 6000)
-    const res = await fetch(url, { signal: ctrl.signal })
-    clearTimeout(timer)
-    if (!res.ok) throw new Error('NASA API error')
-    const data = await res.json()
+    const response = await fetch(url, { signal: controller.signal })
+    if (!response.ok) throw new Error(`NASA DONKI returned status ${response.status}.`)
+    const data = await response.json()
+    if (!Array.isArray(data)) throw new Error('NASA DONKI returned an unexpected response.')
+
     const events = data
-      .filter((e) => e.classType)
-      .map((e) => ({ date: (e.peakTime || e.beginTime).slice(0, 10), cls: e.classType, type: 'Solar flare' }))
+      .filter((event) => event.classType && (event.peakTime || event.beginTime))
+      .map((event) => ({
+        date: (event.peakTime || event.beginTime).slice(0, 10),
+        cls: event.classType,
+        type: 'Solar flare',
+      }))
       .sort((a, b) => rank(b.cls) - rank(a.cls) || parseFloat(b.cls.slice(1)) - parseFloat(a.cls.slice(1)))
       .slice(0, 3)
-    if (events.length < 3) throw new Error('not enough events')
+
     return { source: 'live', events }
-  } catch {
-    return { source: 'saved', events: SAVED_EVENTS.slice(0, 3) }
+  } catch (error) {
+    const message = error.name === 'AbortError'
+      ? 'The NASA DONKI request timed out.'
+      : error instanceof Error
+        ? error.message
+        : 'The NASA DONKI request failed.'
+    return { source: 'error', events: [], error: message }
+  } finally {
+    clearTimeout(timer)
   }
 }
