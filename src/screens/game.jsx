@@ -24,6 +24,7 @@ import { speak, stopSpeaking } from '../game/speech'
 import { tutorialSteps } from '../game/tutorial'
 import { getMapPosition, LANDING_SITES, MOON_MAP_ID, NASA_MAP_PAGE } from '../game/sites'
 import ThemeToggle from '../game/ThemeToggle'
+import ssroLogo from '../assets/ssro-logo.png'
 
 function Meter({ icon: Icon, label, value, color }) {
   return (
@@ -287,7 +288,7 @@ export default function Game() {
     <main className="game-app">
       <header className="game-topbar">
         <div className="mission-brand">
-          <span className="brand-orbit">◉</span>
+          <img className="ssro-logo" src={ssroLogo} alt="SSRO logo" />
           <span className="brand-lockup"><strong>LUNAR OUTPOST ACADEMY</strong><small>SSRO</small></span>
         </div>
         <div className="current-site"><MapPinLabel /> <span>{selectedSite.mission}<b>{selectedSite.name}</b></span></div>
@@ -308,7 +309,7 @@ export default function Game() {
       <div className="game-body">
         <aside className="mission-sidebar">
           <div className="commander-heading">
-            <div className="commander-avatar">✦</div>
+            <img className="commander-avatar" src={ssroLogo} alt="SSRO logo" />
             <div><span className="section-kicker">MISSION CONTROL</span><h1>{g.name || 'Commander'}</h1></div>
           </div>
           <div className="commander-score"><Trophy size={15} /><span><small>MISSION POINTS</small><b>{g.score}</b></span></div>
@@ -404,7 +405,7 @@ export default function Game() {
           role="dialog"
           aria-labelledby="guide-title"
         >
-          <div className="guide-mascot" aria-hidden="true">✦</div>
+          <img className="guide-mascot" src={ssroLogo} alt="" />
           <div className="guide-copy">
             <div className="guide-meta">CAPTAIN LUNA <span>·</span> {String(g.tutorialStep + 1).padStart(2, '0')} / {String(steps.length).padStart(2, '0')}</div>
             <h2 id="guide-title">{step.title}</h2>

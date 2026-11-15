@@ -21,6 +21,7 @@ import { loadNasaImage } from '../game/nasa'
 import { getMapPosition, LANDING_SITES, NASA_MAP_PAGE } from '../game/sites'
 import { speak } from '../game/speech'
 import ThemeToggle from '../game/ThemeToggle'
+import ssroLogo from '../assets/ssro-logo.png'
 
 const MAZE_COLUMNS = 15
 const MAZE_ROWS = 11
@@ -424,7 +425,7 @@ export default function LandingSites() {
     <main className="landing-screen landing-game-screen">
       <header className="mission-topbar landing-game-topbar">
         <div className="mission-brand">
-          <span className="brand-orbit">◉</span>
+          <img className="ssro-logo" src={ssroLogo} alt="SSRO logo" />
           <span className="brand-lockup"><strong>LUNAR OUTPOST ACADEMY</strong><small>SSRO</small></span>
         </div>
         <div className="landing-commander"><span>MISSION TRAINING</span><b>{name || 'Astronaut'}</b></div>
