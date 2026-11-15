@@ -2,64 +2,69 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion } from 'motion/react'
 import {
   ArrowRight,
-  BatteryCharging,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   ChevronUp,
   Flag,
+  LogOut,
   MapPin,
   Rocket,
+  ScanLine,
   Sparkles,
   Volume2,
   VolumeX,
+  X,
 } from 'lucide-react'
 import { useGame } from '../game/store'
 import { loadNasaImage } from '../game/nasa'
-import { LANDING_SITES } from '../game/sites'
+import { getMapPosition, LANDING_SITES, NASA_MAP_PAGE } from '../game/sites'
 import { speak } from '../game/speech'
 import ThemeToggle from '../game/ThemeToggle'
 
 const MAZE_COLUMNS = 15
 const MAZE_ROWS = 11
-const AIR_CELLS = [
-  { x: 5, y: 1 },
-  { x: 11, y: 3 },
-  { x: 5, y: 7 },
+const SURVEY_MARKERS = [
+  { x: 5, y: 1, number: 1 },
+  { x: 11, y: 3, number: 2 },
+  { x: 5, y: 7, number: 3 },
 ]
 const LANDING_BEACON = { x: 13, y: 9 }
 const PHOTO_REQUESTS = new Map()
 
-function createMaze(seedText) {
-  let seed = Array.from(seedText).reduce((value, char) => (value * 31 + char.charCodeAt(0)) >>> 0, 7)
-  const random = () => {
-    seed = (seed * 1664525 + 1013904223) >>> 0
-    return seed / 4294967296
-  }
-  const width = (MAZE_COLUMNS - 1) / 2
-  const height = (MAZE_ROWS - 1) / 2
+function createMissionRoute() {
   const grid = Array.from({ length: MAZE_ROWS }, () => Array(MAZE_COLUMNS).fill(1))
-  const visited = new Set(['0,0'])
-  const stack = [{ x: 0, y: 0 }]
-  const directions = [[1, 0], [-1, 0], [0, 1], [0, -1]]
 
-  grid[1][1] = 0
-  while (stack.length) {
-    const current = stack[stack.length - 1]
-    const choices = directions
-      .map(([dx, dy]) => ({ x: current.x + dx, y: current.y + dy, dx, dy }))
-      .filter(({ x, y }) => x >= 0 && x < width && y >= 0 && y < height && !visited.has(`${x},${y}`))
+  const corridors = [
+    [[1, 1], [13, 1]],
+    [[13, 1], [13, 3]],
+    [[9, 3], [13, 3]],
+    [[9, 3], [9, 5]],
+    [[3, 5], [9, 5]],
+    [[3, 5], [3, 7]],
+    [[3, 7], [11, 7]],
+    [[11, 7], [11, 9]],
+    [[5, 9], [13, 9]],
+    [[2, 1], [2, 3]],
+    [[2, 3], [9, 3]],
+    [[7, 1], [7, 3]],
+    [[11, 3], [11, 4]],
+    [[5, 5], [5, 6]],
+    [[7, 7], [7, 8]],
+    [[9, 9], [9, 8]],
+  ]
 
-    if (!choices.length) {
-      stack.pop()
-      continue
+  for (const [[startX, startY], [endX, endY]] of corridors) {
+    const dx = Math.sign(endX - startX)
+    const dy = Math.sign(endY - startY)
+    let x = startX
+    let y = startY
+    grid[y][x] = 0
+    while (x !== endX || y !== endY) {
+      if (x !== endX) x += dx
+      else y += dy
+      grid[y][x] = 0
     }
-
-    const next = choices[Math.floor(random() * choices.length)]
-    grid[current.y * 2 + 1 + next.dy][current.x * 2 + 1 + next.dx] = 0
-    grid[next.y * 2 + 1][next.x * 2 + 1] = 0
-    visited.add(`${next.x},${next.y}`)
-    stack.push({ x: next.x, y: next.y })
   }
 
   return grid
@@ -93,10 +98,161 @@ function DirectionButton({ label, onClick, children }) {
   )
 }
 
+function MazeBoard({ maze, mazePosition, mazeCollected, mazeComplete, compact = false }) {
+  return (
+    <div
+      className={`maze-board${compact ? ' survey-preview-board' : ''}`}
+      role="grid"
+      aria-label="Training map. Scan survey markers 1, 2, and 3 in order, then guide the rover to the landing beacon."
+      style={{ gridTemplateColumns: `repeat(${MAZE_COLUMNS}, minmax(0, 1fr))` }}
+    >
+      {maze.flatMap((row, y) => row.map((wall, x) => {
+        const isPlayer = mazePosition.x === x && mazePosition.y === y
+        const isBeacon = LANDING_BEACON.x === x && LANDING_BEACON.y === y
+        const cellKey = `${x},${y}`
+        const marker = SURVEY_MARKERS.find((item) => item.x === x && item.y === y)
+        const isSurveyMarker = marker && !mazeCollected.includes(cellKey)
+        return (
+          <div
+            className={`maze-cell ${wall ? 'maze-wall' : 'maze-path'} ${isBeacon ? 'maze-beacon' : ''}`}
+            key={cellKey}
+            role="gridcell"
+            aria-label={isPlayer ? 'Rover' : isBeacon ? 'Landing beacon' : isSurveyMarker ? `Survey marker ${marker.number}` : wall ? 'Crater wall' : 'Safe route'}
+          >
+            {isSurveyMarker && <motion.span
+              className={`maze-survey-marker ${marker.number === mazeCollected.length + 1 ? 'is-next' : 'is-locked'}`}
+              animate={marker.number === mazeCollected.length + 1 ? { scale: [0.9, 1.08, 0.9] } : { scale: 1 }}
+              transition={{ duration: 1.6, repeat: Infinity }}
+            >
+              {marker.number}
+            </motion.span>}
+            {isBeacon && <Flag size={14} className={`beacon-flag ${mazeComplete ? 'beacon-ready' : ''}`} aria-hidden="true" />}
+            {isPlayer && <motion.span className="maze-rover" animate={{ y: [0, -2, 0] }} transition={{ duration: 0.7, repeat: Infinity }}><Rocket size={17} /></motion.span>}
+          </div>
+        )
+      }))}
+    </div>
+  )
+}
+
+function MazeMovementControls({ hint, movePlayer, id = 'rover-controls', compact = false }) {
+  return (
+    <div className={`maze-controls${compact ? ' survey-preview-controls' : ''}`} id={id}>
+      <div className="maze-instructions" role="status" aria-live="polite">
+        <small className="maze-control-label">DRIVE THE ROVER</small>
+        <span>{hint}</span>
+        <small>Use the arrows or your keyboard to move.</small>
+      </div>
+      <div className="maze-direction-pad" aria-label="Rover movement controls">
+        <DirectionButton label="Move up" onClick={() => movePlayer(0, -1)}><ChevronUp size={19} /></DirectionButton>
+        <DirectionButton label="Move left" onClick={() => movePlayer(-1, 0)}><ChevronLeft size={19} /></DirectionButton>
+        <DirectionButton label="Move down" onClick={() => movePlayer(0, 1)}><ChevronDown size={19} /></DirectionButton>
+        <DirectionButton label="Move right" onClick={() => movePlayer(1, 0)}><ChevronRight size={19} /></DirectionButton>
+      </div>
+    </div>
+  )
+}
+
+function AnimatedLandingMap({ selectedSite, onSelectSite }) {
+  const { left, top } = getMapPosition(selectedSite)
+
+  return (
+    <div
+      className="landing-map-art"
+      role="group"
+      aria-label="Illustrated lunar atlas with six Apollo landing regions placed using their NASA coordinates. Select a numbered marker or destination."
+    >
+      <div className="landing-map-stars" aria-hidden="true"><i /><i /><i /><i /><i /><i /></div>
+      <div className="landing-map-contours" aria-hidden="true">
+        <span className="map-crater crater-a" />
+        <span className="map-crater crater-b" />
+        <span className="map-crater crater-c" />
+        <span className="map-crater crater-d" />
+        <span className="map-crater crater-e" />
+      </div>
+      <svg className="landing-map-route" viewBox="0 0 900 440" preserveAspectRatio="none" aria-hidden="true">
+        <path d="M0 290C130 235 185 355 320 285S520 165 660 260s155 70 240 8" />
+        <path d="M35 104C160 160 204 76 330 130s205 38 290-8 168 5 238 72" />
+        <g className="landing-map-connectors">
+          {LANDING_SITES.map((site, index) => {
+            const position = getMapPosition(site)
+            const x = Number.parseFloat(position.left) * 9
+            const y = Number.parseFloat(position.top) * 4.4
+            const markerX = ((index + 1) / (LANDING_SITES.length + 1)) * 900
+            return (
+              <g key={site.id} className={site.id === selectedSite.id ? 'is-selected' : ''}>
+                <line x1={x} y1={y} x2={markerX} y2="316" />
+                <circle cx={x} cy={y} r={site.id === selectedSite.id ? 6 : 3.5} />
+              </g>
+            )
+          })}
+        </g>
+      </svg>
+      <span className="landing-map-label">ILLUSTRATED ATLAS</span>
+      {LANDING_SITES.map((site, index) => {
+        const selected = site.id === selectedSite.id
+        return (
+          <motion.button
+            key={site.id}
+            type="button"
+            className={`lunar-site-pin${selected ? ' is-selected' : ''}`}
+            style={{ left: `${((index + 1) / (LANDING_SITES.length + 1)) * 100}%`, top: '72%' }}
+            onClick={() => onSelectSite(site.id)}
+            whileHover={{ scale: 1.18 }}
+            whileTap={{ scale: 0.9 }}
+            aria-label={`Choose ${site.mission}, ${site.name}`}
+            aria-pressed={selected}
+            title={`${site.mission} · ${site.name}`}
+          >
+            {index + 1}
+          </motion.button>
+        )
+      })}
+      <motion.div
+        key={selectedSite.id}
+        className="landing-map-scan"
+        style={{ left, top }}
+        initial={{ opacity: 0, scale: 0.45 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.45, ease: 'easeOut' }}
+        aria-hidden="true"
+      />
+      <motion.div
+        key={`rover-${selectedSite.id}`}
+        className="landing-map-rover"
+        style={{ left, top }}
+        initial={{ opacity: 0, x: -18, y: 12 }}
+        animate={{ opacity: 1, x: 14, y: 10 }}
+        transition={{ duration: 0.55, type: 'spring', stiffness: 120 }}
+        aria-hidden="true"
+      >
+        <Rocket size={15} />
+      </motion.div>
+      <motion.div
+        key={`label-${selectedSite.id}`}
+        className="landing-map-selection"
+        initial={{ opacity: 0, y: 7 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.25 }}
+        aria-live="polite"
+      >
+        <small>{selectedSite.mission.toUpperCase()} · SELECTED REGION</small>
+        <b>{selectedSite.name}</b>
+        <span>{formatCoordinates(selectedSite)}</span>
+      </motion.div>
+      <div className="landing-map-source">
+        <span>Animated illustration · pins use real NASA coordinates</span>
+        <a href={NASA_MAP_PAGE} target="_blank" rel="noreferrer">NASA map reference <ArrowRight size={12} /></a>
+      </div>
+    </div>
+  )
+}
+
 export default function LandingSites() {
   const name = useGame((state) => state.name)
   const muted = useGame((state) => state.muted)
   const toggleMute = useGame((state) => state.toggleMute)
+  const logout = useGame((state) => state.logout)
   const selectedSiteId = useGame((state) => state.selectedSite)
   const selectedSite = LANDING_SITES.find((site) => site.id === selectedSiteId) || LANDING_SITES[0]
   const selectLandingSite = useGame((state) => state.selectLandingSite)
@@ -108,10 +264,14 @@ export default function LandingSites() {
   const completeMaze = useGame((state) => state.completeMaze)
   const addScore = useGame((state) => state.addScore)
   const score = useGame((state) => state.score)
-  const maze = useMemo(() => createMaze(selectedSite.id), [selectedSite.id])
+  const maze = useMemo(() => createMissionRoute(), [])
   const [photos, setPhotos] = useState({})
-  const [hint, setHint] = useState('Collect 3 air cells, then find the landing beacon.')
+  const [hint, setHint] = useState('Scan route markers 1, 2, and 3 in order, then reach the landing beacon.')
+  const [surveyModalOpen, setSurveyModalOpen] = useState(false)
   const moveRef = useRef(() => {})
+  const modalCloseRef = useRef(null)
+  const surveyTriggerRef = useRef(null)
+  const modalWasOpen = useRef(false)
   const photo = photos[selectedSite.id] || { status: 'loading' }
 
   useEffect(() => {
@@ -131,23 +291,31 @@ export default function LandingSites() {
     }
 
     const cellKey = `${next.x},${next.y}`
-    const hasAirCell = AIR_CELLS.some((cell) => cell.x === next.x && cell.y === next.y)
+    const markerIndex = SURVEY_MARKERS.findIndex((marker) => marker.x === next.x && marker.y === next.y)
     const alreadyCollected = mazeCollected.includes(cellKey)
-    const nextCollected = hasAirCell && !alreadyCollected ? [...mazeCollected, cellKey] : mazeCollected
+    let nextCollected = mazeCollected
 
-    if (hasAirCell && !alreadyCollected) {
+    if (markerIndex >= 0 && !alreadyCollected && markerIndex === mazeCollected.length) {
+      nextCollected = [...mazeCollected, cellKey]
       addScore(100)
-      setHint(`Air cell collected! +100 points. ${AIR_CELLS.length - nextCollected.length} left.`)
-      speak(`Air cell collected! One hundred points. ${AIR_CELLS.length - nextCollected.length} left.`, muted)
+      const remaining = SURVEY_MARKERS.length - nextCollected.length
+      setHint(remaining
+        ? `Survey marker ${markerIndex + 1} recorded! +100 points. Find marker ${markerIndex + 2} next.`
+        : 'All three survey markers are mapped. Now guide the rover to the landing beacon.')
+      speak(remaining
+        ? `Survey marker ${markerIndex + 1} recorded. One hundred points. Find marker ${markerIndex + 2} next.`
+        : `All three survey markers are mapped, ${name}. Now find the landing beacon.`, muted)
+    } else if (markerIndex > mazeCollected.length) {
+      setHint(`This scan point is not ready yet. Find survey marker ${mazeCollected.length + 1} first.`)
     }
 
     if (next.x === LANDING_BEACON.x && next.y === LANDING_BEACON.y) {
-      if (nextCollected.length === AIR_CELLS.length) {
+      if (nextCollected.length === SURVEY_MARKERS.length) {
         completeMaze()
-        setHint('Beacon reached! Landing practice complete. +250 points!')
-        speak(`Beacon reached, ${name}! You earned 250 points.`, muted)
+        setHint('Safe route mapped! The habitat is cleared to land. +250 points!')
+        speak(`Safe route mapped, ${name}! The habitat is cleared to land. You earned 250 points.`, muted)
       } else {
-        setHint(`Find all ${AIR_CELLS.length} air cells before landing. ${AIR_CELLS.length - nextCollected.length} left.`)
+        setHint(`The beacon is locked. Map survey marker ${nextCollected.length + 1} first.`)
       }
     }
 
@@ -159,7 +327,39 @@ export default function LandingSites() {
   }, [movePlayer])
 
   useEffect(() => {
+    if (!surveyModalOpen) {
+      if (modalWasOpen.current) surveyTriggerRef.current?.focus()
+      modalWasOpen.current = false
+      return
+    }
+    modalWasOpen.current = true
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    modalCloseRef.current?.focus()
+    return () => { document.body.style.overflow = previousOverflow }
+  }, [surveyModalOpen])
+
+  useEffect(() => {
     function onKeyDown(event) {
+      if (event.key === 'Escape' && surveyModalOpen) {
+        setSurveyModalOpen(false)
+        return
+      }
+      if (event.key === 'Tab' && surveyModalOpen) {
+        const buttons = document.querySelectorAll('.survey-modal button:not([disabled])')
+        const first = buttons[0]
+        const last = buttons[buttons.length - 1]
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault()
+          last?.focus()
+          return
+        }
+        if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault()
+          first?.focus()
+          return
+        }
+      }
       const direction = {
         ArrowUp: [0, -1],
         w: [0, -1],
@@ -181,20 +381,58 @@ export default function LandingSites() {
 
     window.addEventListener('keydown', onKeyDown)
     return () => window.removeEventListener('keydown', onKeyDown)
-  }, [])
+  }, [surveyModalOpen])
 
   function launch() {
-    if (!mazeComplete || photo.status === 'loading') return
+    if (!mazeComplete) return
+    if (photo.status === 'loading') {
+      setHint('Your NASA archive image is still loading. Try again in a moment.')
+      return
+    }
     launchMission(selectedSite.id, photo.status === 'loaded' ? photo.asset : null)
+  }
+
+  function chooseSite(siteId) {
+    const site = LANDING_SITES.find((entry) => entry.id === siteId)
+    if (!site) return
+    selectLandingSite(site.id)
+    setHint(`${site.mission} selected. Next, drive to survey markers 1, 2, and 3.`)
+    speak(`${site.mission} selected, ${name}. Your destination is ${site.name}. Next, drive the rover to survey markers one, two, and three.`, muted)
+  }
+
+  function activateStage(stage) {
+    if (stage === 1) {
+      document.querySelector('.landing-site-choices')?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      setHint('Step 1: choose one of the six Apollo landing sites.')
+      speak(`Step one, ${name}: choose an Apollo landing site.`, muted)
+      return
+    }
+    if (stage === 2) {
+      setSurveyModalOpen(true)
+      speak(`Step two, ${name}: survey the landing route. Collect markers one, two, and three in order, then reach the beacon.`, muted)
+      return
+    }
+    if (!mazeComplete) {
+      setHint(`Habitat landing is locked. Scan route marker ${mazeCollected.length + 1} first.`)
+      speak(`The habitat landing is locked, ${name}. First, scan route marker ${mazeCollected.length + 1}.`, muted)
+      return
+    }
+    launch()
   }
 
   return (
     <main className="landing-screen landing-game-screen">
       <header className="mission-topbar landing-game-topbar">
-        <div className="mission-brand"><span className="brand-orbit">◉</span><span>LUNAR OUTPOST <b>ACADEMY</b></span></div>
+        <div className="mission-brand">
+          <span className="brand-orbit">◉</span>
+          <span className="brand-lockup"><strong>LUNAR OUTPOST ACADEMY</strong><small>SSRO</small></span>
+        </div>
         <div className="landing-commander"><span>MISSION TRAINING</span><b>{name || 'Astronaut'}</b></div>
         <div className="topbar-right">
           <span className="landing-score"><Sparkles size={14} /> {score} POINTS</span>
+          <button className="logout-button" onClick={logout} aria-label="Log out" title="Log out">
+            <LogOut size={15} /><span>Log out</span>
+          </button>
           <button className="sound-toggle" onClick={toggleMute} aria-label={muted ? 'Turn narration on' : 'Turn narration off'}>
             {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
           </button>
@@ -206,60 +444,26 @@ export default function LandingSites() {
         <div className="landing-maze-panel">
           <div className="maze-heading">
             <div>
-              <span className="section-kicker">MOON MAZE · TRAINING SIMULATION</span>
-              <h1>Guide your rover to the landing beacon</h1>
+              <span className="section-kicker">STEP 2 OF 3 · ROVER SURVEY</span>
+              <h1>Chart a safe landing route</h1>
+              <p className="maze-mission-brief">Scan points 1 → 2 → 3, then reach the beacon to clear a habitat landing route. Training map—not NASA terrain.</p>
             </div>
             <div className="maze-objective">
-              <span><BatteryCharging size={15} /> AIR CELLS</span>
-              <b>{mazeCollected.length} / {AIR_CELLS.length}</b>
+              <span><ScanLine size={15} /> ROUTE SCANS</span>
+              <b>{mazeCollected.length} / {SURVEY_MARKERS.length}</b>
             </div>
           </div>
 
           <div className="maze-board-wrap">
-            <div
-              className="maze-board"
-              role="grid"
-              aria-label="Moon maze. Collect three air cells and guide the rover to the landing beacon."
-              style={{ gridTemplateColumns: `repeat(${MAZE_COLUMNS}, minmax(0, 1fr))` }}
-            >
-              {maze.flatMap((row, y) => row.map((wall, x) => {
-                const isPlayer = mazePosition.x === x && mazePosition.y === y
-                const isBeacon = LANDING_BEACON.x === x && LANDING_BEACON.y === y
-                const cellKey = `${x},${y}`
-                const isAirCell = AIR_CELLS.some((cell) => cell.x === x && cell.y === y) && !mazeCollected.includes(cellKey)
-                return (
-                  <div
-                    className={`maze-cell ${wall ? 'maze-wall' : 'maze-path'} ${isBeacon ? 'maze-beacon' : ''}`}
-                    key={cellKey}
-                    role="gridcell"
-                    aria-label={isPlayer ? 'Rover' : isBeacon ? 'Landing beacon' : isAirCell ? 'Air cell' : wall ? 'Rock wall' : 'Path'}
-                  >
-                    {isAirCell && <motion.span className="maze-air-cell" animate={{ scale: [0.85, 1.12, 0.85] }} transition={{ duration: 1.6, repeat: Infinity }}><Sparkles size={13} /></motion.span>}
-                    {isBeacon && <Flag size={14} className={`beacon-flag ${mazeComplete ? 'beacon-ready' : ''}`} aria-hidden="true" />}
-                    {isPlayer && <motion.span className="maze-rover" animate={{ y: [0, -2, 0] }} transition={{ duration: 0.7, repeat: Infinity }}><Rocket size={17} /></motion.span>}
-                  </div>
-                )
-              }))}
-            </div>
+            <MazeBoard maze={maze} mazePosition={mazePosition} mazeCollected={mazeCollected} mazeComplete={mazeComplete} />
           </div>
 
-          <div className="maze-controls">
-            <div className="maze-instructions" role="status" aria-live="polite">
-              <span>{hint}</span>
-              <small>Use arrow keys, WASD, or tap the arrows.</small>
-            </div>
-            <div className="maze-direction-pad" aria-label="Rover movement controls">
-              <DirectionButton label="Move up" onClick={() => movePlayer(0, -1)}><ChevronUp size={19} /></DirectionButton>
-              <DirectionButton label="Move left" onClick={() => movePlayer(-1, 0)}><ChevronLeft size={19} /></DirectionButton>
-              <DirectionButton label="Move down" onClick={() => movePlayer(0, 1)}><ChevronDown size={19} /></DirectionButton>
-              <DirectionButton label="Move right" onClick={() => movePlayer(1, 0)}><ChevronRight size={19} /></DirectionButton>
-            </div>
-          </div>
+          <MazeMovementControls hint={hint} movePlayer={movePlayer} />
         </div>
 
         <aside className="landing-site-panel">
           <div className="site-panel-heading">
-            <div><span className="section-kicker">REAL APOLLO LANDING SPOT</span><h2>Choose your destination</h2></div>
+            <div><span className="section-kicker">STEP 1 OF 3 · REAL NASA DATA</span><h2>Choose your destination</h2></div>
             <MapPin size={18} aria-hidden="true" />
           </div>
           <div className="landing-site-choices" aria-label="Choose an Apollo landing site">
@@ -267,10 +471,7 @@ export default function LandingSites() {
               <button
                 key={site.id}
                 className={site.id === selectedSite.id ? 'is-selected' : ''}
-                onClick={() => {
-                  selectLandingSite(site.id)
-                  setHint('Collect 3 air cells, then find the landing beacon.')
-                }}
+                onClick={() => chooseSite(site.id)}
                 aria-pressed={site.id === selectedSite.id}
               >
                 <span>{String(index + 1).padStart(2, '0')}</span>
@@ -279,37 +480,96 @@ export default function LandingSites() {
             ))}
           </div>
 
-          <div className="landing-site-photo">
-            {photo.status === 'loaded' ? (
-              <>
-                <img src={photo.asset.imageUrl} alt={`${photo.asset.title}, NASA archive image for ${selectedSite.name}`} />
-                <a href={photo.asset.sourceUrl} target="_blank" rel="noreferrer">NASA ARCHIVE PHOTO <ArrowRight size={12} /></a>
-              </>
-            ) : (
-              <div className="landing-photo-status">
-                {photo.status === 'error' ? 'NASA photo unavailable. Try again later.' : 'Loading real NASA archive photo…'}
-              </div>
-            )}
-          </div>
+          <AnimatedLandingMap selectedSite={selectedSite} onSelectSite={chooseSite} />
 
-          <div className="landing-site-details" aria-live="polite">
+          <motion.div
+            key={selectedSite.id}
+            className="landing-site-details"
+            aria-live="polite"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.25 }}
+          >
             <h3>{selectedSite.name}</h3>
             <span>{formatCoordinates(selectedSite)}</span>
             <p>{selectedSite.summary}</p>
-          </div>
+          </motion.div>
+
+          <ol className="landing-flow" aria-label="Mission stages">
+            <li className="is-done">
+              <button type="button" className="landing-flow-button" onClick={() => activateStage(1)} aria-label="Step 1: choose an Apollo destination">
+                <i>1</i><span><b>DESTINATION</b><small>Choose a site</small></span>
+              </button>
+            </li>
+            <li className={mazeComplete ? 'is-done' : 'is-current'}>
+              <button ref={surveyTriggerRef} type="button" className="landing-flow-button" onClick={() => activateStage(2)} aria-current={mazeComplete ? undefined : 'step'} aria-label="Step 2: open the rover survey">
+                <i>2</i><span><b>ROVER SURVEY</b><small>Scan 3 points</small></span>
+              </button>
+            </li>
+            <li className={mazeComplete ? 'is-current' : ''}>
+              <button type="button" className="landing-flow-button" onClick={() => activateStage(3)} aria-current={mazeComplete ? 'step' : undefined} aria-label="Step 3: habitat landing">
+                <i>3</i><span><b>HABITAT</b><small>Land the base</small></span>
+              </button>
+            </li>
+          </ol>
 
           {mazeComplete ? (
             <div className="landing-complete">
-              <span><Sparkles size={15} /> PRACTICE COMPLETE</span>
+              <span><Sparkles size={15} /> STEP 3 OF 3 · SAFE TO LAND</span>
               <button className="launch-button" onClick={launch} disabled={photo.status === 'loading'}>
-                {photo.status === 'loading' ? 'Loading NASA photo…' : photo.status === 'error' ? 'Continue without photo' : 'Continue to Moon base'} <ArrowRight size={18} />
+                {photo.status === 'loading' ? 'Loading NASA photo…' : photo.status === 'error' ? 'Begin without photo' : 'Begin habitat mission'} <ArrowRight size={18} />
               </button>
             </div>
           ) : (
-            <div className="landing-lock-note"><Flag size={15} /> Collect all 3 air cells to unlock the mission.</div>
+            <div className="landing-lock-note">
+              <Flag size={17} />
+              <span><b>YOUR MISSION</b><small>Scan all 3 route points to unlock the habitat landing.</small></span>
+              <a className="rover-scroll-link" href="#rover-controls"><ChevronDown size={16} /> Drive rover</a>
+            </div>
           )}
         </aside>
       </section>
+
+      {surveyModalOpen && (
+        <motion.div
+          className="survey-modal-backdrop"
+          role="presentation"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          onClick={(event) => {
+            if (event.target === event.currentTarget) setSurveyModalOpen(false)
+          }}
+        >
+          <motion.section
+            className="survey-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="survey-modal-title"
+            initial={{ opacity: 0, y: 18, scale: 0.97 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+          >
+            <header className="survey-modal-heading">
+              <div>
+                <span className="section-kicker">STEP 2 · ROVER SURVEY</span>
+                <h2 id="survey-modal-title">Map the safe landing route</h2>
+              </div>
+              <button ref={modalCloseRef} type="button" className="survey-modal-close" onClick={() => setSurveyModalOpen(false)} aria-label="Close rover survey">
+                <X size={20} />
+              </button>
+            </header>
+            <p className="survey-modal-copy">Drive to markers 1, 2, and 3 in order, then reach the beacon. This small map shares progress with the main survey.</p>
+            <div className="survey-modal-map">
+              <MazeBoard maze={maze} mazePosition={mazePosition} mazeCollected={mazeCollected} mazeComplete={mazeComplete} compact />
+            </div>
+            <MazeMovementControls hint={hint} movePlayer={movePlayer} id="rover-controls-preview" compact />
+            <div className="survey-modal-footer">
+              <span><ScanLine size={15} /> ROUTE SCANS <b>{mazeCollected.length} / {SURVEY_MARKERS.length}</b></span>
+              <button type="button" onClick={() => setSurveyModalOpen(false)}>Back to mission</button>
+            </div>
+          </motion.section>
+        </motion.div>
+      )}
     </main>
   )
 }

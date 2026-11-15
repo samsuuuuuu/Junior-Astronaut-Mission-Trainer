@@ -1,8 +1,10 @@
 # Lunar Outpost Academy
 
-A narrated Moon-base mission game for young space explorers. Players navigate a replayable Moon-maze training simulation, collect air cells, earn points, and choose from six historic Apollo landing regions. Each destination includes its real coordinates, a short description, and an image from NASA's archive.
+A narrated Moon-base mission game for young space explorers. Players choose one of six historic Apollo landing regions, then guide a rover along a fixed training route: scan three numbered waypoints in order and reach the beacon to clear a safe landing corridor for the habitat. The destination panel uses an animated illustrated lunar atlas with real Apollo coordinates; selecting a numbered marker updates the destination and narrated guidance. The rover-survey stage also opens as a compact playable map that shares progress with the main route.
 
-The game then guides players through a ten-day crew-survival mission, balancing air, power, and shielding. Progress, player name, selected site, score, tutorial position, and theme are saved in the browser's local storage; no account or server-side profile is used. A dark/light appearance toggle is available on each screen.
+The interface uses Lunar Outpost Academy / SSRO branding, a violet space palette, and a shared footer with creator contact and profile links.
+
+The game then guides players through a ten-day crew-survival mission, balancing air, power, and shielding. Progress, player name, selected site, score, tutorial position, and theme are saved in the browser's local storage; no account or server-side profile is used. Log out to clear the astronaut's saved run and return to name entry. A dark/light appearance toggle is available on each screen.
 
 ## Run locally
 
@@ -13,7 +15,7 @@ npm run dev
 
 ## NASA data and voice
 
-Apollo landing-region coordinates and image IDs are listed in `src/game/sites.js`. Site photos and the GRAIL lunar gravity-field map load from NASA's Images API and link to their NASA archive records. The maze is a clearly labeled training simulation, not NASA terrain or landing-site imagery.
+Apollo landing-region coordinates and image IDs are listed in `src/game/sites.js`. The destination atlas is an illustration, not NASA terrain; its pins use the real Apollo coordinates. NASA archive photos appear in the habitat mission, and the GRAIL lunar gravity-field map is available in the atlas screen. Both link to their NASA records. The rover route is a clearly labeled training simulation, not NASA terrain or landing-site imagery.
 
 The mission also requests recent solar-flare observations from NASA's DONKI FLR API. Set `VITE_NASA_API_KEY` in a local `.env` file for regular use; NASA's shared `DEMO_KEY` is rate-limited and may return HTTP 429. If DONKI is unavailable, the game reports the issue instead of substituting sample observations.
 

@@ -4,6 +4,7 @@ import {
   ArrowUpRight,
   BatteryCharging,
   Compass,
+  LogOut,
   Map,
   MousePointer2,
   Moon,
@@ -285,7 +286,10 @@ export default function Game() {
   return (
     <main className="game-app">
       <header className="game-topbar">
-        <div className="mission-brand"><span className="brand-orbit">◉</span><span>LUNAR OUTPOST <b>ACADEMY</b></span></div>
+        <div className="mission-brand">
+          <span className="brand-orbit">◉</span>
+          <span className="brand-lockup"><strong>LUNAR OUTPOST ACADEMY</strong><small>SSRO</small></span>
+        </div>
         <div className="current-site"><MapPinLabel /> <span>{selectedSite.mission}<b>{selectedSite.name}</b></span></div>
         <nav className="game-nav" aria-label="Mission navigation">
           <button data-guide-target="mission" className={activeTab === 'mission' ? 'active' : ''} onClick={() => chooseTab('mission')}><Compass size={17} /> Mission</button>
@@ -294,6 +298,9 @@ export default function Game() {
         </nav>
         <button className="sound-toggle" onClick={g.toggleMute} aria-label={g.muted ? 'Turn sound on' : 'Turn sound off'}>
           {g.muted ? <VolumeX size={19} /> : <Volume2 size={19} />}
+        </button>
+        <button className="logout-button" onClick={g.logout} aria-label="Log out" title="Log out">
+          <LogOut size={15} /><span>Log out</span>
         </button>
         <ThemeToggle />
       </header>
@@ -408,6 +415,7 @@ export default function Game() {
             <button onClick={() => speak(step.text, g.muted)} aria-label="Hear Captain Luna again"><Volume2 size={17} /></button>
             <button onClick={previousTutorialStep} disabled={g.tutorialStep === 0}>Previous</button>
             <button onClick={skip}>Skip</button>
+            <button onClick={g.logout}>Log out</button>
           </div>
         </motion.section>
       )}

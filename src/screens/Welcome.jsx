@@ -44,7 +44,10 @@ export default function Welcome() {
           ))}
         </div>
         <div className="welcome-art-copy">
-          <div className="brand-mark"><Rocket size={18} /> LUNAR OUTPOST ACADEMY</div>
+          <div className="brand-mark">
+            <Rocket size={18} />
+            <span className="brand-lockup"><strong>LUNAR OUTPOST ACADEMY</strong><small>SSRO</small></span>
+          </div>
           <p className="art-eyebrow">YOUR NEXT BIG ADVENTURE</p>
           <h2>One small step.<br />One amazing mission.</h2>
           <p>Meet your Moon crew and help them make it through ten days in space.</p>
@@ -85,7 +88,10 @@ export default function Welcome() {
 
       <section className="welcome-form-wrap">
         <div className="welcome-form">
-          <div className="mobile-brand brand-mark"><Rocket size={18} /> LUNAR OUTPOST ACADEMY</div>
+          <div className="mobile-brand brand-mark">
+            <Rocket size={18} />
+            <span className="brand-lockup"><strong>LUNAR OUTPOST ACADEMY</strong><small>SSRO</small></span>
+          </div>
           <div className="welcome-topline">
             <div className="welcome-step">ASTRONAUT CHECK-IN <span>01 / 03</span></div>
             <button

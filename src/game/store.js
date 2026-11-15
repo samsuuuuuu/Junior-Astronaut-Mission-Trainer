@@ -41,6 +41,23 @@ export const useGame = create(persist((set, get) => ({
   mazeComplete: false,
 
   setName: (name) => set({ name }),
+  logout: () => set((s) => ({
+    ...START,
+    screen: 'welcome',
+    name: '',
+    selectedSite: 'apollo-11',
+    landingImage: null,
+    moonMapImage: s.moonMapImage,
+    muted: s.muted,
+    theme: s.theme,
+    tutorialStep: 0,
+    tutorialActionsDone: [],
+    nasa: s.nasa,
+    score: 0,
+    mazePosition: { x: 1, y: 1 },
+    mazeCollected: [],
+    mazeComplete: false,
+  })),
   startSiteSelection: () => set((s) => ({ screen: 'landing', selectedSite: s.selectedSite || 'apollo-11' })),
   selectLandingSite: (selectedSite) => set((s) => s.selectedSite === selectedSite ? {} : ({
     selectedSite,
