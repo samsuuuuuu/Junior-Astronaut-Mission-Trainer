@@ -21,7 +21,6 @@ import { loadNasaImage } from '../game/nasa'
 import { getMapPosition, LANDING_SITES, NASA_MAP_PAGE } from '../game/sites'
 import { speak } from '../game/speech'
 import ThemeToggle from '../game/ThemeToggle'
-import ssroLogo from '../assets/ssro-logo.png'
 
 const MAZE_COLUMNS = 15
 const MAZE_ROWS = 11
@@ -142,7 +141,7 @@ function MazeMovementControls({ hint, movePlayer, id = 'rover-controls', compact
       <div className="maze-instructions" role="status" aria-live="polite">
         <small className="maze-control-label">DRIVE THE ROVER</small>
         <span>{hint}</span>
-        <small>Use the arrows or your keyboard to move.</small>
+        <small>Tap an arrow or use arrow keys / W A S D to drive.</small>
       </div>
       <div className="maze-direction-pad" aria-label="Rover movement controls">
         <DirectionButton label="Move up" onClick={() => movePlayer(0, -1)}><ChevronUp size={19} /></DirectionButton>
@@ -267,7 +266,7 @@ export default function LandingSites() {
   const score = useGame((state) => state.score)
   const maze = useMemo(() => createMissionRoute(), [])
   const [photos, setPhotos] = useState({})
-  const [hint, setHint] = useState('Scan route markers 1, 2, and 3 in order, then reach the landing beacon.')
+  const [hint, setHint] = useState('First-time tip: follow the open path and scan markers 1 → 2 → 3 in order, then reach the beacon.')
   const [surveyModalOpen, setSurveyModalOpen] = useState(false)
   const moveRef = useRef(() => {})
   const modalCloseRef = useRef(null)
@@ -425,7 +424,6 @@ export default function LandingSites() {
     <main className="landing-screen landing-game-screen">
       <header className="mission-topbar landing-game-topbar">
         <div className="mission-brand">
-          <img className="ssro-logo" src={ssroLogo} alt="SSRO logo" />
           <span className="brand-lockup"><strong>LUNAR OUTPOST ACADEMY</strong><small>SSRO</small></span>
         </div>
         <div className="landing-commander"><span>MISSION TRAINING</span><b>{name || 'Astronaut'}</b></div>
@@ -442,7 +440,7 @@ export default function LandingSites() {
       </header>
 
       <section className="landing-game-layout">
-        <div className="landing-maze-panel">
+        <div className="landing-maze-panel" id="rover-survey">
           <div className="maze-heading">
             <div>
               <span className="section-kicker">STEP 2 OF 3 · ROVER SURVEY</span>
@@ -525,7 +523,7 @@ export default function LandingSites() {
             <div className="landing-lock-note">
               <Flag size={17} />
               <span><b>YOUR MISSION</b><small>Scan all 3 route points to unlock the habitat landing.</small></span>
-              <a className="rover-scroll-link" href="#rover-controls"><ChevronDown size={16} /> Drive rover</a>
+              <a className="rover-scroll-link" href="#rover-survey"><ChevronDown size={16} /> Drive rover</a>
             </div>
           )}
         </aside>

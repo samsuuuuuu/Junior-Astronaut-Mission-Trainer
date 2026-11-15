@@ -196,21 +196,6 @@ menu {
   letter-spacing: 0.16em;
 }
 
-.ssro-logo {
-  flex: 0 0 auto;
-  width: 40px;
-  height: 40px;
-  border: 1px solid rgba(140, 193, 255, 0.6);
-  border-radius: 50%;
-  box-shadow: 0 0 14px rgba(80, 153, 242, 0.32);
-  object-fit: cover;
-}
-
-.mission-brand .ssro-logo {
-  width: 32px;
-  height: 32px;
-}
-
 .art-eyebrow {
   margin-top: clamp(48px, 8vh, 90px);
   color: var(--mission-accent-light);
@@ -3839,11 +3824,6 @@ menu {
   .landing-game-topbar .mission-brand {
     gap: 5px;
     font-size: 8px;
-  }
-
-  .landing-game-topbar .ssro-logo {
-    width: 27px;
-    height: 27px;
   }
 
   .landing-commander {

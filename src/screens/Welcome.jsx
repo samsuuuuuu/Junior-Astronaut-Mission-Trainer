@@ -3,7 +3,6 @@ import { motion } from 'motion/react'
 import { ArrowRight, Headphones, Sparkles, Volume2, VolumeX } from 'lucide-react'
 import { useGame } from '../game/store'
 import ThemeToggle from '../game/ThemeToggle'
-import ssroLogo from '../assets/ssro-logo.png'
 
 export default function Welcome() {
   const [value, setValue] = useState('')
@@ -46,7 +45,6 @@ export default function Welcome() {
         </div>
         <div className="welcome-art-copy">
           <div className="brand-mark">
-            <img className="ssro-logo" src={ssroLogo} alt="SSRO logo" />
             <span className="brand-lockup"><strong>LUNAR OUTPOST ACADEMY</strong><small>SSRO</small></span>
           </div>
           <p className="art-eyebrow">YOUR NEXT BIG ADVENTURE</p>
@@ -90,7 +88,6 @@ export default function Welcome() {
       <section className="welcome-form-wrap">
         <div className="welcome-form">
           <div className="mobile-brand brand-mark">
-            <img className="ssro-logo" src={ssroLogo} alt="SSRO logo" />
             <span className="brand-lockup"><strong>LUNAR OUTPOST ACADEMY</strong><small>SSRO</small></span>
           </div>
           <div className="welcome-topline">

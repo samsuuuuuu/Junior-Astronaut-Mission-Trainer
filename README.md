@@ -21,6 +21,13 @@ The mission also requests recent solar-flare observations from NASA's DONKI FLR 
 
 The survival challenge is a simulation: game storm days are not NASA forecasts. Narration prefers an installed English female voice; available voices and sound quality depend on the browser and operating system.
 
+## Technologies and data credits
+
+- NASA [DONKI](https://kauai.ccmc.gsfc.nasa.gov/DONKI/) solar-flare data
+- [React](https://react.dev), [Vite](https://vite.dev), and [Tailwind CSS](https://tailwindcss.com)
+- [Three.js](https://threejs.org), [React Three Fiber](https://r3f.docs.pmnd.rs/), and [Drei](https://drei.docs.pmnd.rs/)
+- [Zustand](https://zustand.docs.pmnd.rs/), [Motion](https://motion.dev/), and [Lucide React](https://lucide.dev/guide/packages/lucide-react)
+
 ## Checks
 
 ```sh

@@ -288,7 +288,6 @@ export default function Game() {
     <main className="game-app">
       <header className="game-topbar">
         <div className="mission-brand">
-          <img className="ssro-logo" src={ssroLogo} alt="SSRO logo" />
           <span className="brand-lockup"><strong>LUNAR OUTPOST ACADEMY</strong><small>SSRO</small></span>
         </div>
         <div className="current-site"><MapPinLabel /> <span>{selectedSite.mission}<b>{selectedSite.name}</b></span></div>
@@ -416,7 +415,6 @@ export default function Game() {
             <button onClick={() => speak(step.text, g.muted)} aria-label="Hear Captain Luna again"><Volume2 size={17} /></button>
             <button onClick={previousTutorialStep} disabled={g.tutorialStep === 0}>Previous</button>
             <button onClick={skip}>Skip</button>
-            <button onClick={g.logout}>Log out</button>
           </div>
         </motion.section>
       )}
